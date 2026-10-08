@@ -39,10 +39,7 @@ function M.count()
   return #entries
 end
 
-function M.render(buf)
-  if not vim.api.nvim_buf_is_valid(buf) then
-    return
-  end
+function M.lines()
   local lines = { 'LEADERBOARD', '', 'Attempts: ' .. #entries, '' }
   for i, e in ipairs(entries) do
     if i > 20 then
@@ -55,8 +52,15 @@ function M.render(buf)
     table.insert(lines, string.format('%d. %d keys', i, e.keystrokes))
     table.insert(lines, '   ' .. sentence)
   end
+  return lines
+end
+
+function M.render(buf)
+  if not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
   vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, M.lines())
   vim.bo[buf].modifiable = false
 end
 
