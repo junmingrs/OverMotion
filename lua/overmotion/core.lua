@@ -42,8 +42,10 @@ end
 
 function M.next()
   state.current = sentences.random()
+  state.broken = sentences.corrupt(state.current)
   ui.set_target(state.target_buf, state.current)
-  vim.api.nvim_buf_set_lines(state.edit_buf, 0, -1, false, { '' })
+  vim.api.nvim_buf_set_lines(state.edit_buf, 0, -1, false, { state.broken })
+  vim.api.nvim_win_set_cursor(state.edit_win, { 1, 0 })
   tracker.reset()
 end
 
@@ -56,8 +58,9 @@ function M.start()
     buffer = state.edit_buf,
     callback = check,
   })
-  vim.keymap.set('n', 'r', function()
-    vim.api.nvim_buf_set_lines(state.edit_buf, 0, -1, false, { '' })
+  vim.keymap.set('n', '<C-r>', function()
+    vim.api.nvim_buf_set_lines(state.edit_buf, 0, -1, false, { state.broken })
+    vim.api.nvim_win_set_cursor(state.edit_win, { 1, 0 })
   end, { buffer = state.edit_buf, nowait = true })
   vim.keymap.set('n', 's', function()
     M.next()

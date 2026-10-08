@@ -34,4 +34,35 @@ function M.random()
   return sentences[idx]
 end
 
+function M.corrupt(text)
+  local function mutate(t)
+    local kind = math.random(4)
+    local i = math.random(#t)
+    if kind == 1 or #t < 3 then
+      -- replace a letter with a random one
+      local c = string.char(math.random(97, 122))
+      return t:sub(1, i - 1) .. c .. t:sub(i + 1)
+    elseif kind == 2 then
+      -- delete a character
+      return t:sub(1, i - 1) .. t:sub(i + 1)
+    elseif kind == 3 and i < #t then
+      -- swap two adjacent characters
+      return t:sub(1, i - 1) .. t:sub(i + 1, i + 1) .. t:sub(i, i) .. t:sub(i + 2)
+    else
+      -- duplicate a character
+      return t:sub(1, i) .. t:sub(i, i) .. t:sub(i + 1)
+    end
+  end
+
+  local corrupted = text
+  local times = math.max(2, math.min(4, math.floor(#text / 20)))
+  for _ = 1, times do
+    corrupted = mutate(corrupted)
+  end
+  if corrupted == text then
+    corrupted = mutate(corrupted)
+  end
+  return corrupted
+end
+
 return M
