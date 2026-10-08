@@ -79,17 +79,26 @@ local function on_message(msg)
         end
       end
     end
+    local width = 44
+    local function center(line)
+      local pad = math.max(0, math.floor((width - #line) / 2))
+      return string.rep(' ', pad) .. line
+    end
     local lines = {
       '',
-      '              MATCH OVER',
+      center('MATCH OVER'),
       '',
-      string.format('  Solved this match: %d', state.solved_count),
-      string.format('  Total keystrokes:  %d', state.total_keystrokes),
+      center(string.format('Solved this match: %d', state.solved_count)),
+      center(string.format('Total keystrokes:  %d', state.total_keystrokes)),
       '',
     }
     leaderboard.load()
     for _, l in ipairs(leaderboard.lines()) do
-      table.insert(lines, l)
+      if l == 'LEADERBOARD' or l:match('^Attempts:') then
+        table.insert(lines, center(l))
+      else
+        table.insert(lines, l)
+      end
     end
     local buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -97,7 +106,6 @@ local function on_message(msg)
     vim.bo[buf].bufhidden = 'wipe'
     vim.bo[buf].swapfile = false
     vim.bo[buf].modifiable = false
-    local width = 44
     local height = math.min(#lines, vim.o.lines - 4)
     local win = vim.api.nvim_open_win(buf, true, {
       relative = 'editor',
