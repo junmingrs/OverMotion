@@ -12,6 +12,9 @@ local function on_key(key, typed)
   if vim.api.nvim_get_current_win() ~= edit_win then
     return
   end
+  if typed == '' then
+    return -- injected by a mapping/plugin, not actually typed
+  end
   count = count + 1
   if not start_time then
     start_time = vim.uv.now()

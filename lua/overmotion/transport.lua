@@ -1,6 +1,6 @@
 local M = {}
 
-function M.connect(host, port, on_line, on_error, on_close)
+function M.connect(host, port, on_line, on_error, on_close, on_connect)
   local uv = vim.uv
   local handle = uv.new_tcp()
   local buffer = ''
@@ -44,6 +44,9 @@ function M.connect(host, port, on_line, on_error, on_close)
       buffer = buffer .. chunk
       process_buffer()
     end)
+    if on_connect then
+      vim.schedule(on_connect)
+    end
   end)
 
   return {

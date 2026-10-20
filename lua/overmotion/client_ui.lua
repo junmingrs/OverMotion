@@ -47,7 +47,7 @@ function M.connect_form(on_submit)
     vim.api.nvim_win_close(win, true)
   end, { buffer = buf })
   vim.api.nvim_win_set_cursor(win, { 3, 9 })
-  vim.cmd('startinsert!')
+  vim.cmd('stopinsert')
 end
 
 function M.match_layout()

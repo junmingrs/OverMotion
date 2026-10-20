@@ -6,8 +6,29 @@ local tracker = require('overmotion.tracker')
 local solve = require('overmotion.solve')
 local leaderboard = require('overmotion.leaderboard')
 local client_ui = require('overmotion.client_ui')
+local waiting = require('overmotion.waiting')
 
 local state = nil
+
+local function leave()
+  local s = state
+  state = nil
+  waiting.close()
+  if s then
+    if s.conn then
+      s.conn.close()
+    end
+    tracker.detach()
+    if s.wins then
+      for _, b in ipairs({ s.wins.target_buf, s.wins.edit_buf }) do
+        if vim.api.nvim_buf_is_valid(b) then
+          vim.api.nvim_buf_delete(b, { force = true })
+        end
+      end
+    end
+  end
+  require('overmotion.starter').show()
+end
 
 local function handle_solved()
   if not state or state.awaiting then
@@ -42,17 +63,7 @@ local function load_prompt(msg)
       buffer = state.edit_buf,
       callback = handle_solved,
     })
-    vim.keymap.set('n', 'q', function()
-      state.conn.close()
-      tracker.detach()
-      for _, b in ipairs({ state.wins.target_buf, state.edit_buf }) do
-        if vim.api.nvim_buf_is_valid(b) then
-          vim.api.nvim_buf_delete(b, { force = true })
-        end
-      end
-      require('overmotion.starter').show()
-      state = nil
-    end, { buffer = state.edit_buf, nowait = true })
+    vim.keymap.set('n', 'q', leave, { buffer = state.edit_buf, nowait = true })
   end
 
   state.target = msg.target
@@ -70,9 +81,15 @@ end
 local function on_message(msg)
   if msg.type == 'start' then
     vim.notify(string.format('Match started! %ds', math.floor((msg.duration_ms or 0) / 1000)))
+  elseif msg.type == 'joined' then
+    if state then
+      waiting.open(state.host, leave)
+    end
   elseif msg.type == 'prompt' then
+    waiting.close()
     load_prompt(msg)
   elseif msg.type == 'end' then
+    waiting.close()
     vim.notify('Match over!')
     if state and state.conn then
       state.conn.close()
@@ -135,18 +152,34 @@ end
 
 function M.start()
   client_ui.connect_form(function(name, host, port)
-    state = { conn = nil, wins = nil, target = nil, prompt_id = nil, awaiting = false, solved_count = 0, total_keystrokes = 0 }
+    state = {
+      conn = nil,
+      wins = nil,
+      target = nil,
+      prompt_id = nil,
+      awaiting = false,
+      solved_count = 0,
+      total_keystrokes = 0,
+      name = name,
+      host = host,
+      port = port,
+    }
     state.conn = transport.connect(host, port, function(line)
       local msg = protocol.decode(line)
       if msg then
         on_message(msg)
       end
     end, function(err)
+      waiting.close()
       vim.notify('Connection error: ' .. tostring(err), vim.log.levels.ERROR)
     end, function()
+      waiting.close()
       vim.notify('Disconnected from server')
+    end, function()
+      if state and state.conn then
+        state.conn.send(protocol.encode({ type = 'join', name = name }))
+      end
     end)
-    state.conn.send(protocol.encode({ type = 'join', name = name }))
   end)
 end
 
