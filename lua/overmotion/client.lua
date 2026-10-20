@@ -45,6 +45,12 @@ local function load_prompt(msg)
     vim.keymap.set('n', 'q', function()
       state.conn.close()
       tracker.detach()
+      for _, b in ipairs({ state.wins.target_buf, state.edit_buf }) do
+        if vim.api.nvim_buf_is_valid(b) then
+          vim.api.nvim_buf_delete(b, { force = true })
+        end
+      end
+      require('overmotion.starter').show()
       state = nil
     end, { buffer = state.edit_buf, nowait = true })
   end
@@ -121,6 +127,7 @@ local function on_message(msg)
       if vim.api.nvim_win_is_valid(win) then
         vim.api.nvim_win_close(win, true)
       end
+      require('overmotion.starter').show()
     end, { buffer = buf, nowait = true })
     state = nil
   end

@@ -9,7 +9,7 @@ function M.connect_form(on_submit)
     '  Host: ',
     '  Port: 7777',
     '',
-    '  [ Connect ]  (press <CR> here)',
+    '  Press Enter in Normal mode',
   }
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   local width = 40

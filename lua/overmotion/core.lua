@@ -20,6 +20,7 @@ local function teardown()
     end
   end
   state = nil
+  require('overmotion.starter').show()
 end
 
 local function check()
