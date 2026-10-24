@@ -103,6 +103,7 @@ local function load_prompt(msg)
   vim.bo[state.wins.target_buf].modifiable = false
   vim.api.nvim_buf_set_lines(state.edit_buf, 0, -1, false, { msg.broken })
   vim.api.nvim_win_set_cursor(state.wins.edit_win, { 1, 0 })
+  vim.cmd('stopinsert')
 end
 
 local function open_intermission(msg)

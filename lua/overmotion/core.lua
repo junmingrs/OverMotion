@@ -48,6 +48,12 @@ function M.next()
   vim.api.nvim_buf_set_lines(state.edit_buf, 0, -1, false, { state.broken })
   vim.api.nvim_win_set_cursor(state.edit_win, { 1, 0 })
   tracker.reset()
+  vim.schedule(function()
+    if state and state.edit_win and vim.api.nvim_win_is_valid(state.edit_win) then
+      vim.api.nvim_set_current_win(state.edit_win)
+      vim.cmd('stopinsert')
+    end
+  end)
 end
 
 function M.start()
