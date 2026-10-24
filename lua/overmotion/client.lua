@@ -9,23 +9,56 @@ local client_ui = require('overmotion.client_ui')
 local waiting = require('overmotion.waiting')
 
 local state = nil
+local generation = 0
+
+local function close_intermission()
+  if not state then
+    return
+  end
+  local win, buf = state.end_win, state.end_buf
+  state.end_win = nil
+  state.end_buf = nil
+  if win and vim.api.nvim_win_is_valid(win) then
+    pcall(vim.api.nvim_win_close, win, true)
+  end
+  if buf and vim.api.nvim_buf_is_valid(buf) then
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+  end
+end
+
+local function clear_game()
+  if not state or not state.wins then
+    return
+  end
+  local wins = state.wins
+  state.wins = nil
+  state.edit_buf = nil
+  for _, buf in ipairs({ wins.target_buf, wins.edit_buf }) do
+    if buf and vim.api.nvim_buf_is_valid(buf) then
+      pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    end
+  end
+  for _, win in ipairs({ wins.target_win, wins.edit_win }) do
+    if win and vim.api.nvim_win_is_valid(win) and #vim.api.nvim_list_wins() > 1 then
+      pcall(vim.api.nvim_win_close, win, true)
+    end
+  end
+end
 
 local function leave()
+  if not state then
+    require('overmotion.starter').show()
+    return
+  end
   local s = state
+  close_intermission()
+  tracker.detach()
+  clear_game()
   state = nil
+  generation = generation + 1
   waiting.close()
-  if s then
-    if s.conn then
-      s.conn.close()
-    end
-    tracker.detach()
-    if s.wins then
-      for _, b in ipairs({ s.wins.target_buf, s.wins.edit_buf }) do
-        if vim.api.nvim_buf_is_valid(b) then
-          vim.api.nvim_buf_delete(b, { force = true })
-        end
-      end
-    end
+  if s.conn then
+    s.conn.close()
   end
   require('overmotion.starter').show()
 end
@@ -78,80 +111,118 @@ local function load_prompt(msg)
   vim.api.nvim_win_set_cursor(state.wins.edit_win, { 1, 0 })
 end
 
+local function open_intermission()
+  if not state then
+    return
+  end
+
+  local width = 44
+  local function center(line)
+    local pad = math.max(0, math.floor((width - #line) / 2))
+    return string.rep(' ', pad) .. line
+  end
+
+  local lines = {
+    '',
+    center('MATCH OVER'),
+    '',
+    center(string.format('Solved this round: %d', state.solved_count)),
+    center(string.format('Total keystrokes:  %d', state.total_keystrokes)),
+    '',
+    center('Waiting for next round...'),
+    '',
+  }
+  leaderboard.load()
+  for _, l in ipairs(leaderboard.lines(3)) do
+    if l == 'LEADERBOARD' or l:match('^Attempts:') then
+      table.insert(lines, center(l))
+    else
+      table.insert(lines, l)
+    end
+  end
+  table.insert(lines, '')
+  table.insert(lines, '  [q] Leave')
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].buftype = 'nofile'
+  vim.bo[buf].bufhidden = 'wipe'
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].modifiable = false
+
+  local height = math.min(#lines, math.max(1, vim.o.lines - 4))
+  local ok, win = pcall(vim.api.nvim_open_win, buf, true, {
+    relative = 'editor',
+    row = math.max(0, math.floor((vim.o.lines - height) / 2)),
+    col = math.max(0, math.floor((vim.o.columns - width) / 2)),
+    width = width,
+    height = height,
+    style = 'minimal',
+    border = 'single',
+  })
+  if not ok then
+    if vim.api.nvim_buf_is_valid(buf) then
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end
+    return
+  end
+
+  vim.wo[win].cursorline = true
+  state.end_buf = buf
+  state.end_win = win
+  vim.keymap.set('n', 'q', leave, { buffer = buf, nowait = true })
+end
+
 local function on_message(msg)
   if msg.type == 'start' then
+    if not state then
+      return
+    end
+    close_intermission()
+    state.solved_count = 0
+    state.total_keystrokes = 0
+    state.awaiting = true
+    state.target = nil
+    state.prompt_id = nil
     vim.notify(string.format('Match started! %ds', math.floor((msg.duration_ms or 0) / 1000)))
   elseif msg.type == 'joined' then
     if state then
       waiting.open(state.host, leave)
     end
   elseif msg.type == 'prompt' then
+    if not state then
+      return
+    end
+    close_intermission()
     waiting.close()
     load_prompt(msg)
   elseif msg.type == 'end' then
+    if not state then
+      return
+    end
+    close_intermission()
     waiting.close()
     vim.notify('Match over!')
-    if state and state.conn then
-      state.conn.close()
-    end
     tracker.detach()
-    if state and state.wins then
-      for _, buf in ipairs({ state.wins.target_buf, state.wins.edit_buf }) do
-        if vim.api.nvim_buf_is_valid(buf) then
-          vim.api.nvim_buf_delete(buf, { force = true })
-        end
-      end
-    end
-    local width = 44
-    local function center(line)
-      local pad = math.max(0, math.floor((width - #line) / 2))
-      return string.rep(' ', pad) .. line
-    end
-    local lines = {
-      '',
-      center('MATCH OVER'),
-      '',
-      center(string.format('Solved this match: %d', state.solved_count)),
-      center(string.format('Total keystrokes:  %d', state.total_keystrokes)),
-      '',
-    }
-    leaderboard.load()
-    for _, l in ipairs(leaderboard.lines()) do
-      if l == 'LEADERBOARD' or l:match('^Attempts:') then
-        table.insert(lines, center(l))
-      else
-        table.insert(lines, l)
-      end
-    end
-    local buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-    vim.bo[buf].buftype = 'nofile'
-    vim.bo[buf].bufhidden = 'wipe'
-    vim.bo[buf].swapfile = false
-    vim.bo[buf].modifiable = false
-    local height = math.min(#lines, vim.o.lines - 4)
-    local win = vim.api.nvim_open_win(buf, true, {
-      relative = 'editor',
-      row = math.floor((vim.o.lines - height) / 2),
-      col = math.floor((vim.o.columns - width) / 2),
-      width = width,
-      height = height,
-      style = 'minimal',
-      border = 'single',
-    })
-    vim.wo[win].cursorline = true
-    vim.keymap.set('n', 'q', function()
-      if vim.api.nvim_win_is_valid(win) then
-        vim.api.nvim_win_close(win, true)
-      end
-      require('overmotion.starter').show()
-    end, { buffer = buf, nowait = true })
-    state = nil
+    clear_game()
+    state.awaiting = true
+    state.target = nil
+    state.prompt_id = nil
+    open_intermission()
   end
 end
 
 function M.start()
   client_ui.connect_form(function(name, host, port)
+    if state then
+      leave()
+    end
+    generation = generation + 1
+    local my_generation = generation
+    local function current()
+      return state ~= nil and generation == my_generation
+    end
+
     state = {
       conn = nil,
       wins = nil,
@@ -163,20 +234,32 @@ function M.start()
       name = name,
       host = host,
       port = port,
+      end_win = nil,
+      end_buf = nil,
     }
+
     state.conn = transport.connect(host, port, function(line)
+      if not current() then
+        return
+      end
       local msg = protocol.decode(line)
       if msg then
         on_message(msg)
       end
     end, function(err)
+      if not current() then
+        return
+      end
       vim.notify('Connection error: ' .. tostring(err), vim.log.levels.ERROR)
       leave()
     end, function()
+      if not current() then
+        return
+      end
       vim.notify('Disconnected from server')
       leave()
     end, function()
-      if state and state.conn then
+      if current() and state.conn then
         state.conn.send(protocol.encode({ type = 'join', name = name }))
       end
     end)

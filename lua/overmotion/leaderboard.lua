@@ -39,10 +39,11 @@ function M.count()
   return #entries
 end
 
-function M.lines()
+function M.lines(limit)
+  limit = limit or 20
   local lines = { 'LEADERBOARD', '', 'Attempts: ' .. #entries, '' }
   for i, e in ipairs(entries) do
-    if i > 20 then
+    if i > limit then
       break
     end
     local sentence = e.sentence or ''
