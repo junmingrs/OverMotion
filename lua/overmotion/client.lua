@@ -170,11 +170,11 @@ function M.start()
         on_message(msg)
       end
     end, function(err)
-      waiting.close()
       vim.notify('Connection error: ' .. tostring(err), vim.log.levels.ERROR)
+      leave()
     end, function()
-      waiting.close()
       vim.notify('Disconnected from server')
+      leave()
     end, function()
       if state and state.conn then
         state.conn.send(protocol.encode({ type = 'join', name = name }))

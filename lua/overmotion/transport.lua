@@ -54,8 +54,10 @@ function M.connect(host, port, on_line, on_error, on_close, on_connect)
       handle:write(line .. '\n')
     end,
     close = function()
-      handle:read_stop()
-      handle:close()
+      if not handle:is_closing() then
+        handle:read_stop()
+        handle:close()
+      end
     end,
   }
 end

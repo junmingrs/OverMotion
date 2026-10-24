@@ -1,15 +1,16 @@
 local M = {}
 
+local DEFAULT_HOST = '16.176.140.127'
+local DEFAULT_PORT = 7777
+
 function M.connect_form(on_submit)
   local buf = vim.api.nvim_create_buf(false, true)
   local lines = {
     '  OverClient',
     '',
     '  Name: ',
-    '  Host: ',
-    '  Port: 7777',
     '',
-    '  Press Enter in Normal mode',
+    '  Press Enter in normal mode',
   }
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   local width = 40
@@ -27,26 +28,23 @@ function M.connect_form(on_submit)
   vim.wo[win].cursorline = true
 
   local function submit()
-    local content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local name, host, port
-    for _, line in ipairs(content) do
-      name = name or line:match('^%s*Name:%s*(.+)$')
-      host = host or line:match('^%s*Host:%s*(.+)$')
-      port = port or line:match('^%s*Port:%s*(%d+)')
+    local name
+    for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+      name = name or line:match('^%s*Name:%s*(.-)%s*$')
     end
-    if not name or not host or not port then
-      vim.notify('Fill in Name, Host and Port', vim.log.levels.WARN)
+    if not name or name == '' then
+      vim.notify('Enter a name', vim.log.levels.WARN)
       return
     end
     vim.api.nvim_win_close(win, true)
-    on_submit(name, host, tonumber(port))
+    on_submit(name, DEFAULT_HOST, DEFAULT_PORT)
   end
 
   vim.keymap.set('n', '<CR>', submit, { buffer = buf })
   vim.keymap.set('n', 'q', function()
     vim.api.nvim_win_close(win, true)
   end, { buffer = buf })
-  vim.api.nvim_win_set_cursor(win, { 3, 9 })
+  vim.api.nvim_win_set_cursor(win, { 3, 8 })
   vim.cmd('stopinsert')
 end
 
