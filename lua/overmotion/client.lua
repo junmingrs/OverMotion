@@ -4,7 +4,6 @@ local transport = require('overmotion.transport')
 local protocol = require('overmotion.protocol')
 local tracker = require('overmotion.tracker')
 local solve = require('overmotion.solve')
-local leaderboard = require('overmotion.leaderboard')
 local client_ui = require('overmotion.client_ui')
 local waiting = require('overmotion.waiting')
 
@@ -72,11 +71,6 @@ local function handle_solved()
     state.solved_count = state.solved_count + 1
     local keystrokes = tracker.count()
     local elapsed_ms = tracker.elapsed_ms()
-    leaderboard.add({
-      sentence = state.target,
-      keystrokes = keystrokes,
-      elapsed_ms = elapsed_ms,
-    })
     state.total_keystrokes = state.total_keystrokes + keystrokes
     state.conn.send(protocol.encode({
       type = 'solved',
@@ -111,35 +105,62 @@ local function load_prompt(msg)
   vim.api.nvim_win_set_cursor(state.wins.edit_win, { 1, 0 })
 end
 
-local function open_intermission()
+local function open_intermission(msg)
   if not state then
     return
   end
 
-  local width = 44
+  local width = 52
   local function center(line)
     local pad = math.max(0, math.floor((width - #line) / 2))
     return string.rep(' ', pad) .. line
   end
+  local function short_name(name)
+    name = name or ''
+    if #name > 12 then
+      return name:sub(1, 9) .. '...'
+    end
+    return name
+  end
+  local function whole(n)
+    return math.floor((tonumber(n) or 0) + 0.5)
+  end
+
+  local you = msg.you or {}
+  local points = whole(you.points)
+  local solved = you.solved or state.solved_count
+  local keystrokes = you.keystrokes or state.total_keystrokes
+  local avg_seconds = you.avg_seconds or 0
 
   local lines = {
     '',
     center('MATCH OVER'),
     '',
-    center(string.format('Solved this round: %d', state.solved_count)),
-    center(string.format('Total keystrokes:  %d', state.total_keystrokes)),
+    center(string.format('Your points: %d', points)),
+    center(string.format('Solved this round: %d', solved)),
+    center(string.format('Total keystrokes:  %d', keystrokes)),
+    center(string.format('Average per solve: %.2fs', avg_seconds)),
     '',
-    center('Waiting for next round...'),
-    '',
+    center('TOP 3'),
   }
-  leaderboard.load()
-  for _, l in ipairs(leaderboard.lines(3)) do
-    if l == 'LEADERBOARD' or l:match('^Attempts:') then
-      table.insert(lines, center(l))
-    else
-      table.insert(lines, l)
+  local scores = msg.scores or {}
+  if #scores == 0 then
+    table.insert(lines, center('—'))
+  else
+    for i, entry in ipairs(scores) do
+      if i > 3 then
+        break
+      end
+      table.insert(lines, center(string.format(
+        '%d. %-12s %4d pts',
+        i,
+        short_name(entry.name),
+        whole(entry.points)
+      )))
     end
   end
+  table.insert(lines, '')
+  table.insert(lines, center('Waiting for next round...'))
   table.insert(lines, '')
   table.insert(lines, '  [q] Leave')
 
@@ -208,7 +229,7 @@ local function on_message(msg)
     state.awaiting = true
     state.target = nil
     state.prompt_id = nil
-    open_intermission()
+    open_intermission(msg)
   end
 end
 
